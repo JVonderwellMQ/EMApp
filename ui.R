@@ -1,21 +1,26 @@
-#
-# This is the user-interface definition of a Shiny web application. You can
-# run the application by clicking 'Run App' above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    https://shiny.posit.co/
-#
-
 library(shiny)
 
-# Define UI for application that draws a histogram
 fluidPage(
-
-    # Application title
-    titlePanel("EM Webapp"),
-
-    fileInput("data", label = h3("Upload your CSV file")),
-
-    textOutput("filename")
+  
+  titlePanel("EM Webapp"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      fileInput("inputfile", label = h3("Upload your CSV file")),
+      textOutput("filename"),
+      
+      hr(),
+      h4("EM Results"),
+      verbatimTextOutput("em_results")
+    ),
+    
+    mainPanel(
+      h3("Data Preview"),
+      tableOutput("preview"),
+      
+      hr(),
+      
+      plotOutput("hist_em")
+    )
+  )
 )
