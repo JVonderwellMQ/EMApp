@@ -23,9 +23,14 @@ gmm_generation <- function(n, weights, means, sds, plot = TRUE) {
     }
     curve(mixture_density, add = TRUE, col = "red", lwd = 2)
   }
+  return(data)
 }
 
 weights <- c(0.3, 0.4, 0.3)
 means <- c(10, 50, 125)
 sds <- c(3, 15, 20)
-gmm_generation(1000, weights, means, sds)
+data <- gmm_generation(1000, weights, means, sds)
+
+filename <- paste0("gmm_", length(weights), "_components.csv")
+filepath <- paste0("data/", filename)
+write.csv(data, filepath, row.names = FALSE)
