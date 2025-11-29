@@ -1,7 +1,7 @@
 library(shiny)
 library(ggplot2)
 
-em_gmm <- function(x, modes = 2, max_iter = 200, tol = 1e-6) {
+em_gmm <- function(x, modes = 3, max_iter = 200, tol = 1e-6) {
   x <- as.numeric(x)
   
   # Initialize estimates
@@ -108,9 +108,8 @@ function(input, output, session) {
     
     # density curve for plotting
     xgrid <- seq(min(col), max(col), length.out = 400)
-    mix_density <- 
-      pi[1] * dnorm(xgrid, mu[1], sigma[1]) +
-      pi[2] * dnorm(xgrid, mu[2], sigma[2])
+    mix_density <- rowSums(mapply(function(p, m, s) p * dnorm(xgrid, m, s),
+                                  pi, mu, sigma, SIMPLIFY = TRUE))
     
     ggplot(data.frame(x = col), aes(x)) +
       geom_histogram(aes(y = ..density..), bins = 50, alpha = 0.4, fill = "blue") +
