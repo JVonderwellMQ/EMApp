@@ -10,6 +10,9 @@ fluidPage(
       textOutput("filename"),
       
       hr(),
+      numericInput("numModes", label = h3("Number of modes"), value = 1),
+      hr(),
+      
       h4("EM Results"),
       verbatimTextOutput("em_results")
     ),

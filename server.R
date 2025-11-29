@@ -79,7 +79,7 @@ function(input, output, session) {
     num_cols <- sapply(df, is.numeric)
     validate(need(any(num_cols), "No numeric columns found."))
     col <- df[[which(num_cols)[1]]]
-    em_gmm(col)
+    em_gmm(col, modes = input$numModes)
   })
   
   output$em_results <- renderPrint({
