@@ -1,7 +1,11 @@
 library(shiny)
 library(ggplot2)
 
-em_gmm <- function(x, modes = 3, max_iter = 200, tol = 1e-6) {
+MAX_NUM_MODES = 10
+
+ics <- reactiveValues(aics = NULL, bics = NULL)
+
+em_gmm <- function(x, modes, max_iter = 1000, tol = 1e-6) {
   x <- as.numeric(x)
   
   # Initialize estimates
@@ -44,10 +48,25 @@ em_gmm <- function(x, modes = 3, max_iter = 200, tol = 1e-6) {
   }
   
   list(
+    num_modes = modes,
     pi = pi, 
     mu = mu, 
     sigma = sigma, 
     loglik = loglik)
+}
+
+em_aic <- function(emResults) {
+  # mu + sigma + (pi - 1)
+  k <- 3 * emResults$num_modes - 1
+  
+  2 * k - 2 * emResults$loglik
+}
+
+em_bic <- function(emResults, n) {
+  # mu + sigma + (pi - 1)
+  k <- 3 * emResults$num_modes - 1
+  
+  log(n) * k - 2 * emResults$loglik
 }
 
 # -------------------------------
@@ -72,14 +91,32 @@ function(input, output, session) {
   output$preview <- renderTable({
     head(data())
   })
-  
+
   # EM results based on first numeric column
   em_results <- reactive({
     df <- data()
     num_cols <- sapply(df, is.numeric)
     validate(need(any(num_cols), "No numeric columns found."))
     col <- df[[which(num_cols)[1]]]
-    em_gmm(col, modes = input$numModes)
+    
+    all_modes_results = lapply(1:MAX_NUM_MODES, function(n) em_gmm(col, modes = n))
+    
+    ics$aics <- sapply(all_modes_results, function(result) em_aic(result))
+    ics$bics <- sapply(all_modes_results, function(result) em_bic(result, n = length(col)))
+    
+    req(input$modeSelection)
+    mode_selection <- as.numeric(input$modeSelection)
+  
+    if (mode_selection == 1) {
+      num_modes <- which.min(ics$aics)
+    } else if (mode_selection == 2) {
+      num_modes <- which.min(ics$bics)
+    } else if (mode_selection == 3) {
+      req(!is.null(input$numModes), !is.na(input$numModes))
+      num_modes <- input$numModes
+    }
+    
+    all_modes_results[[num_modes]]
   })
   
   output$em_results <- renderPrint({
@@ -122,4 +159,50 @@ function(input, output, session) {
       ) +
       theme_minimal()
   })
+  
+  # ---------------------------------------------
+  # AIC plot
+  # ---------------------------------------------
+  output$ic_plot <- renderPlot({
+    req(ics$aics)
+    req(length(ics$aics) > 0)
+    req(ics$bics)
+    req(length(ics$bics) > 0)
+    
+    df <- data.frame(
+      modes = 1:length(ics$aics),
+      AIC = ics$aics,
+      BIC = ics$bics
+    )
+    
+    # Find minimums
+    aic_min_index <- which.min(ics$aics)
+    aic_min_value <- ics$aics[aic_min_index]
+    bic_min_index <- which.min(ics$bics)
+    bic_min_value <- ics$bics[bic_min_index]
+    
+    ggplot(df, aes(x = factor(modes))) +
+      geom_line(aes(y = AIC, group = 1), color = "blue", size = 1) +
+      geom_point(aes(y = AIC), color = "blue", size = 3) +
+      geom_point(data = data.frame(modes = aic_min_index, IC = aic_min_value),
+                 aes(x = factor(modes), y = IC),
+                 color = "blue", size = 4) +
+      geom_vline(xintercept = aic_min_index, linetype = "dashed", color = "blue") +
+      
+      geom_line(aes(y = BIC, group = 1), color = "green", size = 1) +
+      geom_point(aes(y = BIC), color = "green", size = 3) +
+      geom_point(data = data.frame(modes = bic_min_index, IC = bic_min_value),
+                 aes(x = factor(modes), y = IC),
+                 color = "green", size = 4) +
+      geom_vline(xintercept = bic_min_index, linetype = "dashed", color = "green") +
+      
+      labs(
+        x = "Number of Modes",
+        y = "Information Criterion",
+        title = "AIC and BIC vs Number of Modes"
+      ) +
+      theme_minimal()
+    
+  })
+  
 }

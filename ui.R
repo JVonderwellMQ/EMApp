@@ -10,6 +10,10 @@ fluidPage(
       textOutput("filename"),
       
       hr(),
+      radioButtons("modeSelection", label = h3("How should the number of modes be selected"),
+                   choices = list("AIC" = 1, "BIC" = 2, "Manual" = 3), 
+                   selected = 1),
+      hr(),
       numericInput("numModes", label = h3("Number of modes"), value = 1),
       hr(),
       
@@ -23,7 +27,11 @@ fluidPage(
       
       hr(),
       
-      plotOutput("hist_em")
+      plotOutput("hist_em"),
+      
+      hr(),
+      
+      plotOutput("ic_plot")
     )
   )
 )
