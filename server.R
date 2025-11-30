@@ -5,54 +5,37 @@ MAX_NUM_MODES = 10
 
 ics <- reactiveValues(aics = NULL, bics = NULL)
 
-em_gmm <- function(x, modes, max_iter = 1000, tol = 1e-6, min_sigma = 0.1) {
+# Runs EM for a gaussian mixture model given data and a number of modes.
+# Outputs a list with length equal to the number of iterations run.
+# Each list contains a sublist with the parameters of the model.
+#   pi, mu, sigma, loglik.
+em_gmm <- function(x, modes, max_iter = 1000, tol = 1e-6) {
   x <- as.numeric(x)
-  min_sigma <- 0.05 * sd(x)
   
-  # Initialize estimates
-  #mu <- sample(x, modes)
-  quantiles <- sapply(1:modes, function(mode) mode / (modes + 1))
+  quantiles <- sapply(1:modes, function(m) m/(modes+1))
   mu <- quantile(x, probs = quantiles)
   sigma <- rep(sd(x), modes)
   pi <- rep(1/modes, modes)
-  loglik_prev <- -Inf
   
+  loglik_prev <- -Inf
   history <- vector("list", max_iter)
   
-  for (i in 1:max_iter) {
-    tau <- sapply(1:modes, function(k)
-      pi[k] * dnorm(x, mean = mu[k], sd = sigma[k])
-    )
-    
+  for(i in 1:max_iter){
+    tau <- sapply(1:modes, function(k) pi[k] * dnorm(x, mu[k], sigma[k]))
     gamma <- tau / rowSums(tau)
     
     pi <- colMeans(gamma)
     mu <- colSums(gamma * x) / colSums(gamma)
-    
-    # Standard EM update with minimum sigma clamp
-    sigma <- sqrt(
-      colSums(gamma * (x - matrix(mu, nrow=length(x), ncol=modes, byrow=TRUE))^2) / colSums(gamma)
-    )
-    sigma <- pmax(sigma, min_sigma)  # <- enforce minimum sigma
+    sigma <- sqrt(colSums(gamma*(x-matrix(mu, length(x), modes, TRUE))^2) /
+                    colSums(gamma))
     
     loglik <- sum(log(rowSums(tau)))
-    
     history[[i]] <- list(mu=mu, sigma=sigma, pi=pi, loglik=loglik)
     
-    if (abs(loglik - loglik_prev) < tol) break
+    if(abs(loglik-loglik_prev) < tol) break
     loglik_prev <- loglik
   }
-  
-  history = history[1:i]
-  
-  list(
-    num_modes = modes,
-    pi = pi, 
-    mu = mu, 
-    sigma = sigma, 
-    loglik = loglik,
-    history = history
-  )
+  history[1:i]
 }
 
 em_aic <- function(emResults) {
@@ -108,28 +91,41 @@ function(input, output, session) {
   # EM results based on first numeric column
   em_results <- reactive({
     df <- data()
-    num_cols <- sapply(df, is.numeric)
-    validate(need(any(num_cols), "No numeric columns found."))
+    num_cols <- sapply(df,is.numeric)
     col <- df[[which(num_cols)[1]]]
     
-    all_modes_results = lapply(1:MAX_NUM_MODES, function(n) em_gmm(col, modes = n))
+    # Run EM for 1..MAX_NUM_MODES
+    all_modes <- lapply(1:MAX_NUM_MODES,function(k) em_gmm(col,k))
     
-    ics$aics <- sapply(all_modes_results, function(result) em_aic(result))
-    ics$bics <- sapply(all_modes_results, function(result) em_bic(result, n = length(col)))
+    # Compute AIC/BIC from final iteration of each mode
+    finals <- lapply(all_modes, function(h) h[[length(h)]])
+    ics$aics <- sapply(finals, function(h) em_aic(list(num_modes=length(h$mu),
+                                                       loglik=h$loglik)))
+    ics$bics <- sapply(finals, function(h) em_bic(list(num_modes=length(h$mu),
+                                                       loglik=h$loglik),
+                                                  n = length(col)))
     
-    req(input$modeSelection)
-    mode_selection <- as.numeric(input$modeSelection)
+    # Determine chosen number of components
+    num_modes <- switch(input$modeSelection,
+                        "1" = which.min(ics$aics),
+                        "2" = which.min(ics$bics),
+                        "3" = input$numModes)
+    
+    all_modes[[num_modes]]
+  })
   
-    if (mode_selection == 1) {
-      num_modes <- which.min(ics$aics)
-    } else if (mode_selection == 2) {
-      num_modes <- which.min(ics$bics)
-    } else if (mode_selection == 3) {
-      req(!is.null(input$numModes), !is.na(input$numModes))
-      num_modes <- input$numModes
-    }
-    
-    all_modes_results[[num_modes]]
+  current_iteration <- reactive({
+    history <- em_results()
+    req(input$iterSelect <= length(history))
+    history[[input$iterSelect]]
+  })
+  
+  observeEvent(em_results(), {
+    history <- em_results()
+    updateSliderInput(session, "iterSelect",
+                      min = 1,
+                      max = length(history),
+                      value = length(history))
   })
   
   output$em_results <- renderPrint({
@@ -141,35 +137,18 @@ function(input, output, session) {
   # Histogram + EM mixture density curve
   # ---------------------------------------------
   output$hist_em <- renderPlot({
-    req(data(), em_results())
-    
     df <- data()
+    col <- df[[which(sapply(df, is.numeric))[1]]]
     
-    # first numeric column
-    num_cols <- sapply(df, is.numeric)
-    col <- df[[which(num_cols)[1]]]
-    colname <- names(df)[which(num_cols)[1]]
+    em <- current_iteration()
     
-    # EM parameters
-    em <- em_results()
-    pi <- em$pi
-    mu <- em$mu
-    sigma <- em$sigma
-    
-    # density curve for plotting
     xgrid <- seq(min(col), max(col), length.out = 400)
-    mix_density <- rowSums(mapply(function(p, m, s) p * dnorm(xgrid, m, s),
-                                  pi, mu, sigma, SIMPLIFY = TRUE))
+    mix <- rowSums(mapply(function(p, m, s) p * dnorm(xgrid, m, s), em$pi, em$mu, em$sigma))
     
-    ggplot(data.frame(x = col), aes(x)) +
-      geom_histogram(aes(y = ..density..), bins = 50, alpha = 0.4, fill = "blue") +
-      geom_line(data = data.frame(x = xgrid, y = mix_density),
-                aes(x, y), linewidth = 1.2) +
-      labs(
-        x = colname,
-        y = "Density",
-        title = "Histogram with Fitted EM Gaussian Mixture"
-      ) +
+    ggplot(data.frame(x=col), aes(x=x)) +
+      geom_histogram(aes(y=..density..), bins=50, alpha=0.4, fill="blue") +
+      geom_line(data=data.frame(x=xgrid, y=mix), aes(x=x, y=y), color="red", linewidth=1.2) +
+      labs(title=paste("Iteration", input$iterSelect, "— Mixture Density"), y="Density") +
       theme_minimal()
   })
   
