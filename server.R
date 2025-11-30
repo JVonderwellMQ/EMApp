@@ -5,54 +5,54 @@ MAX_NUM_MODES = 10
 
 ics <- reactiveValues(aics = NULL, bics = NULL)
 
-em_gmm <- function(x, modes, max_iter = 1000, tol = 1e-6) {
+em_gmm <- function(x, modes, max_iter = 1000, tol = 1e-6, min_sigma = 0.1) {
   x <- as.numeric(x)
+  min_sigma <- 0.05 * sd(x)
   
   # Initialize estimates
-  mu <- sample(x, modes)
-  #quantiles <- 1:modes / (modes + 1)
-  #mu <- quantile(x, probs = quantiles)
-  
+  #mu <- sample(x, modes)
+  quantiles <- sapply(1:modes, function(mode) mode / (modes + 1))
+  mu <- quantile(x, probs = quantiles)
   sigma <- rep(sd(x), modes)
-  
-  ## probability of a point belonging to each cluster.
   pi <- rep(1/modes, modes)
-  
   loglik_prev <- -Inf
   
+  history <- vector("list", max_iter)
+  
   for (i in 1:max_iter) {
-    
-    # tau: n × K responsibility matrix
-    # row i = x_i
-    # col k = mixture component k
     tau <- sapply(1:modes, function(k)
       pi[k] * dnorm(x, mean = mu[k], sd = sigma[k])
     )
     
-    # gamma: n x K matrix
-    # gamma[i,k] = probability that x_i belongs to component k
     gamma <- tau / rowSums(tau)
     
-    # pi: K x 1 vector with weights for each component k
     pi <- colMeans(gamma)
-    
     mu <- colSums(gamma * x) / colSums(gamma)
+    
+    # Standard EM update with minimum sigma clamp
     sigma <- sqrt(
-      colSums(gamma * (x - matrix(mu, nrow = length(x), ncol = modes, byrow = TRUE))^2) / 
-      colSums(gamma))
+      colSums(gamma * (x - matrix(mu, nrow=length(x), ncol=modes, byrow=TRUE))^2) / colSums(gamma)
+    )
+    sigma <- pmax(sigma, min_sigma)  # <- enforce minimum sigma
     
     loglik <- sum(log(rowSums(tau)))
+    
+    history[[i]] <- list(mu=mu, sigma=sigma, pi=pi, loglik=loglik)
     
     if (abs(loglik - loglik_prev) < tol) break
     loglik_prev <- loglik
   }
+  
+  history = history[1:i]
   
   list(
     num_modes = modes,
     pi = pi, 
     mu = mu, 
     sigma = sigma, 
-    loglik = loglik)
+    loglik = loglik,
+    history = history
+  )
 }
 
 em_aic <- function(emResults) {
@@ -89,7 +89,20 @@ function(input, output, session) {
   })
   
   output$preview <- renderTable({
-    head(data())
+    req(em_results())
+    history <- em_results()$history
+    df <- do.call(rbind, lapply(seq_along(history), function(i) {
+      data.frame(
+        Iteration = i,
+        Component = seq_along(history[[i]]$mu),
+        Mu = round(history[[i]]$mu, 4),
+        Sigma = round(history[[i]]$sigma, 4),
+        Pi = round(history[[i]]$pi, 4),
+        Loglik = round(history[[i]]$loglik, 4)
+      )
+    }))
+    
+    df
   })
 
   # EM results based on first numeric column
