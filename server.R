@@ -2,14 +2,17 @@ library(shiny)
 library(ggplot2)
 
 MAX_NUM_MODES = 10
+MAX_NUM_ITERATIONS = 1000
+TOL = 1e-6
 
 ics <- reactiveValues(aics = NULL, bics = NULL)
 
 # Runs EM for a gaussian mixture model given data and a number of modes.
 # Outputs a list with length equal to the number of iterations run.
-# Each list contains a sublist with the parameters of the model.
-#   pi, mu, sigma, loglik.
-em_gmm <- function(x, modes, max_iter = 1000, tol = 1e-6) {
+# Each list contains the parameters of the model, each stored as a list of length
+#   equal to the number of modes, as well as the log likelihood.
+# Output params: pi, mu, sigma, loglik.
+em_gmm <- function(x, modes, max_iter = MAX_NUM_ITERATIONS, tol = TOL) {
   x <- as.numeric(x)
   
   quantiles <- sapply(1:modes, function(m) m/(modes+1))
@@ -26,13 +29,13 @@ em_gmm <- function(x, modes, max_iter = 1000, tol = 1e-6) {
     
     pi <- colMeans(gamma)
     mu <- colSums(gamma * x) / colSums(gamma)
-    sigma <- sqrt(colSums(gamma*(x-matrix(mu, length(x), modes, TRUE))^2) /
+    sigma <- sqrt(colSums(gamma*(x - matrix(mu, length(x), modes, TRUE))^2) /
                     colSums(gamma))
     
     loglik <- sum(log(rowSums(tau)))
     history[[i]] <- list(mu=mu, sigma=sigma, pi=pi, loglik=loglik)
     
-    if(abs(loglik-loglik_prev) < tol) break
+    if(abs(loglik - loglik_prev) < tol) break
     loglik_prev <- loglik
   }
   history[1:i]
@@ -88,17 +91,26 @@ function(input, output, session) {
     df
   })
 
-  # EM results based on first numeric column
-  em_results <- reactive({
+  # EM results based on first numeric column.
+  all_modes <- reactive({
     df <- data()
     num_cols <- sapply(df,is.numeric)
     col <- df[[which(num_cols)[1]]]
     
-    # Run EM for 1..MAX_NUM_MODES
-    all_modes <- lapply(1:MAX_NUM_MODES,function(k) em_gmm(col,k))
+    # Run EM for 1:MAX_NUM_MODES
+    lapply(1:MAX_NUM_MODES,function(k) em_gmm(col,k))
+  })
+  
+  # EM results for the chosen number of modes.
+  em_results <- reactive({
+    all_modes_em <- all_modes()
+    
+    df <- data()
+    num_cols <- sapply(df, is.numeric)
+    col <- df[[which(num_cols)[1]]] 
     
     # Compute AIC/BIC from final iteration of each mode
-    finals <- lapply(all_modes, function(h) h[[length(h)]])
+    finals <- lapply(all_modes_em, function(h) h[[length(h)]])
     ics$aics <- sapply(finals, function(h) em_aic(list(num_modes=length(h$mu),
                                                        loglik=h$loglik)))
     ics$bics <- sapply(finals, function(h) em_bic(list(num_modes=length(h$mu),
@@ -111,7 +123,7 @@ function(input, output, session) {
                         "2" = which.min(ics$bics),
                         "3" = input$numModes)
     
-    all_modes[[num_modes]]
+    all_modes_em[[num_modes]]
   })
   
   current_iteration <- reactive({
