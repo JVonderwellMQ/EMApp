@@ -13,29 +13,21 @@ fluidPage(
       radioButtons("modeSelection", label = h3("How should the number of modes be selected"),
                    choices = list("AIC" = 1, "BIC" = 2, "Manual" = 3), 
                    selected = 1),
-      hr(),
       numericInput("numModes", label = h3("Number of modes"), value = 1),
       hr(),
       
       sliderInput("iterSelect", "Iteration to view:",
                   min = 1, max = 1, value = 1, step = 1), # max will be updated later
-      hr(),
-      
-      h4("EM Results"),
-      verbatimTextOutput("em_results")
     ),
     
     mainPanel(
-      h3("Data Preview"),
-      tableOutput("preview"),
-      
-      hr(),
-      
-      plotOutput("hist_em"),
-      
-      hr(),
-      
-      plotOutput("ic_plot")
+      tabsetPanel(
+        id = "main_tabs",
+        tabPanel("Histogram", plotOutput("hist_em")),
+        tabPanel("Parameters", tableOutput("parameter_table")),
+        tabPanel("Input Data", tableOutput("data_preview")),
+        tabPanel("AIC/BIC Plot", plotOutput("ic_plot"))
+      )
     )
   )
 )
