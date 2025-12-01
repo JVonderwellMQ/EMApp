@@ -41,18 +41,18 @@
     history[1:i]
   }
   
-  em_aic <- function(emResults) {
+  em_aic <- function(numModes, loglik) {
     # mu + sigma + (pi - 1)
-    k <- 3 * emResults$num_modes - 1
+    k <- 3 * numModes - 1
     
-    2 * k - 2 * emResults$loglik
+    2 * k - 2 * loglik
   }
   
-  em_bic <- function(emResults, n) {
+  em_bic <- function(numModes, loglik, n) {
     # mu + sigma + (pi - 1)
-    k <- 3 * emResults$num_modes - 1
+    k <- 3 * numModes - 1
     
-    log(n) * k - 2 * emResults$loglik
+    log(n) * k - 2 * loglik
   }
   
   # -------------------------------
@@ -110,7 +110,7 @@
     # EM results based on the chosen column
     all_modes <- reactive({
       # Run EM for 1:MAX_NUM_MODES
-      lapply(1:MAX_NUM_MODES,function(k) em_gmm(column(),k))
+      lapply(1:MAX_NUM_MODES,function(k) em_gmm(column() ,k))
     })
     
     num_modes <- reactive({
@@ -118,11 +118,8 @@
       
       # Compute AIC/BIC from final iteration of each mode
       finals <- lapply(all_modes_em, function(h) h[[length(h)]])
-      ics$aics <- sapply(finals, function(h) em_aic(list(num_modes=length(h$mu),
-                                                         loglik=h$loglik)))
-      ics$bics <- sapply(finals, function(h) em_bic(list(num_modes=length(h$mu),
-                                                         loglik=h$loglik),
-                                                    n = length(column())))
+      ics$aics <- sapply(finals, function(h) em_aic(length(h$mu), loglik=h$loglik))
+      ics$bics <- sapply(finals, function(h) em_bic(length(h$mu), h$loglik, length(column())))
       
       # Determine chosen number of components
       switch(input$modeSelection,
