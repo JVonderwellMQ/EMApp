@@ -8,7 +8,7 @@ fluidPage(
     sidebarPanel(
       fileInput("inputfile", label = h3("Upload your CSV file")),
       textOutput("filename"),
-      
+      numericInput("column", label = h3("Which column to fit?"), value = 1),
       hr(),
       radioButtons("modeSelection", label = h3("How should the number of modes be selected"),
                    choices = list("AIC" = 1, "BIC" = 2, "Manual" = 3), 

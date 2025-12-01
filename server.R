@@ -69,6 +69,16 @@
       read.csv(input$inputfile$datapath)
     })
     
+    column <- reactive({
+      req(data())
+      df <- data()
+      validate(
+        need(input$column > 0, "Column number must be > 0."),
+        need(input$column <= ncol(df), "Column number not found in dataset.")
+      )
+      col <- df[[input$column]]
+    })
+    
     output$filename <- renderText({
       req(data())
       paste("File name:", input$inputfile$name)
@@ -97,22 +107,14 @@
       head(data(), 20)   # show first 20 rows
     })
   
-    # EM results based on first numeric column.
+    # EM results based on the chosen column
     all_modes <- reactive({
-      df <- data()
-      num_cols <- sapply(df,is.numeric)
-      col <- df[[which(num_cols)[1]]]
-      
       # Run EM for 1:MAX_NUM_MODES
-      lapply(1:MAX_NUM_MODES,function(k) em_gmm(col,k))
+      lapply(1:MAX_NUM_MODES,function(k) em_gmm(column(),k))
     })
     
     num_modes <- reactive({
       all_modes_em <- all_modes()
-      
-      df <- data()
-      num_cols <- sapply(df, is.numeric)
-      col <- df[[which(num_cols)[1]]] 
       
       # Compute AIC/BIC from final iteration of each mode
       finals <- lapply(all_modes_em, function(h) h[[length(h)]])
@@ -120,7 +122,7 @@
                                                          loglik=h$loglik)))
       ics$bics <- sapply(finals, function(h) em_bic(list(num_modes=length(h$mu),
                                                          loglik=h$loglik),
-                                                    n = length(col)))
+                                                    n = length(column())))
       
       # Determine chosen number of components
       switch(input$modeSelection,
@@ -161,7 +163,7 @@
     # ---------------------------------------------
     output$hist_em <- renderPlot({
       df <- data()
-      col <- df[[which(sapply(df, is.numeric))[1]]]
+      col <- df[[which(sapply(df, is.numeric))[input$column]]]
       
       em <- current_iteration()
       
