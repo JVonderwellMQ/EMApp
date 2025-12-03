@@ -71,6 +71,9 @@
   # -------------------------------
   function(input, output, session) {
     
+    #############
+    # REACTIVES #
+    #############
     data <- reactive({
       validate(
         need(input$inputfile, "Please upload a file."),
@@ -94,11 +97,6 @@
       isTRUE(input$nonParametric)
     })
     
-    output$filename <- renderText({
-      req(data())
-      paste("File name:", input$inputfile$name)
-    })
-    
     parameter_history <- reactive({
       history <- em_results()
       req(length(history) > 0)
@@ -115,15 +113,6 @@
       }))
       
       df
-    })
-    
-    output$parameter_table <- renderTable({
-      parameter_history()
-    })
-    
-    output$data_preview <- renderTable({
-      req(data())
-      head(data(), 20)  
     })
   
     # EM results based on the chosen column
@@ -150,10 +139,6 @@
              "3" = input$numModes)
     })
     
-    output$fitted_parameters <- renderTable({
-      tail(parameter_history(), num_modes())
-    })
-    
     # EM results for the chosen number of modes.
     em_results <- reactive({
       if (non_parametric()) {
@@ -170,6 +155,7 @@
       history[[input$iterSelect]]
     })
     
+    # Update the number of modes slider to match number being displayed.
     observeEvent(em_results(), {
       history <- em_results()
       updateSliderInput(session, "iterSelect",
@@ -179,14 +165,27 @@
       updateNumericInput(session, "numModes", value = num_modes())
     })
     
+    ############
+    # OUTPUTS ##
+    ############
     output$em_results <- renderPrint({
       req(em_results())
       print(em_results())
     })
     
-    # ---------------------------------------------
-    # Histogram + EM mixture density curve
-    # ---------------------------------------------
+    output$data_preview <- renderTable({
+      req(data())
+      head(data(), 20)  
+    })
+    
+    output$parameter_table <- renderTable({
+      parameter_history()
+    })
+    
+    output$fitted_parameters <- renderTable({
+      tail(parameter_history(), num_modes())
+    })
+    
     output$hist_em <- renderPlot({
       df <- data()
       col <- df[[which(sapply(df, is.numeric))[input$column]]]
@@ -203,9 +202,6 @@
         theme_minimal()
     })
     
-    # ---------------------------------------------
-    # IC plot
-    # ---------------------------------------------
     output$ic_plot <- renderPlot({
       req(ics$aics)
       req(length(ics$aics) > 0)
