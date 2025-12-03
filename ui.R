@@ -17,7 +17,8 @@ fluidPage(
       hr(),
       
       sliderInput("iterSelect", "Iteration to view:",
-                  min = 1, max = 1, value = 1, step = 1), # max will be updated later
+                  min = 1, max = 1, value = 1, step = 1), # max updated dynamically,
+      checkboxInput("nonParametric", label = "Nonparametric estimation", value = FALSE)
     ),
     
     mainPanel(

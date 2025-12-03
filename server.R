@@ -12,12 +12,20 @@
   # Each list contains the parameters of the model, each stored as a list of length
   #   equal to the number of modes, as well as the log likelihood.
   # Output params: pi, mu, sigma, loglik.
-  em_gmm <- function(x, modes, max_iter = MAX_NUM_ITERATIONS, tol = TOL) {
+  em_gmm <- function(x, modes, max_iter = MAX_NUM_ITERATIONS, tol = TOL, non_parametric = FALSE) {
     x <- as.numeric(x)
+    
+    if (non_parametric) {
+      modes <- MAX_NUM_MODES
+      # Apply Silverman's rule to set sigma.
+      h <- 1.06 * sd(x) * length(x)^(-1/5)
+      sigma <- rep(h, modes)
+    } else {
+      sigma <- rep(sd(x), modes)
+    }
     
     quantiles <- sapply(1:modes, function(m) m/(modes+1))
     mu <- quantile(x, probs = quantiles)
-    sigma <- rep(sd(x), modes)
     pi <- rep(1/modes, modes)
     
     loglik_prev <- -Inf
@@ -28,9 +36,12 @@
       gamma <- tau / rowSums(tau)
       
       pi <- colMeans(gamma)
-      mu <- colSums(gamma * x) / colSums(gamma)
-      sigma <- sqrt(colSums(gamma*(x - matrix(mu, length(x), modes, TRUE))^2) /
+      
+      if (!non_parametric) {
+        mu <- colSums(gamma * x) / colSums(gamma)
+        sigma <- sqrt(colSums(gamma*(x - matrix(mu, length(x), modes, TRUE))^2) /
                       colSums(gamma))
+      }
       
       loglik <- sum(log(rowSums(tau)))
       history[[i]] <- list(mu=mu, sigma=sigma, pi=pi, loglik=loglik)
@@ -79,6 +90,10 @@
       col <- df[[input$column]]
     })
     
+    non_parametric <- reactive({
+      isTRUE(input$nonParametric)
+    })
+    
     output$filename <- renderText({
       req(data())
       paste("File name:", input$inputfile$name)
@@ -104,16 +119,19 @@
     
     output$data_preview <- renderTable({
       req(data())
-      head(data(), 20)   # show first 20 rows
+      head(data(), 20)  
     })
   
     # EM results based on the chosen column
     all_modes <- reactive({
       # Run EM for 1:MAX_NUM_MODES
-      lapply(1:MAX_NUM_MODES,function(k) em_gmm(column() ,k))
+      lapply(1:MAX_NUM_MODES,function(k) em_gmm(column(), k))
     })
     
     num_modes <- reactive({
+      if (non_parametric()) {
+        return(MAX_NUM_MODES)
+      }
       all_modes_em <- all_modes()
       
       # Compute AIC/BIC from final iteration of each mode
@@ -130,6 +148,9 @@
     
     # EM results for the chosen number of modes.
     em_results <- reactive({
+      if (non_parametric()) {
+        return(em_gmm(column(), MAX_NUM_MODES, non_parametric = TRUE))
+      }
       all_modes_em <- all_modes()
       num_modes_chosen <- num_modes()
       all_modes_em[[num_modes_chosen]]
