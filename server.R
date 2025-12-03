@@ -99,7 +99,7 @@
       paste("File name:", input$inputfile$name)
     })
     
-    output$parameter_table <- renderTable({
+    parameter_history <- reactive({
       history <- em_results()
       req(length(history) > 0)
       
@@ -115,6 +115,10 @@
       }))
       
       df
+    })
+    
+    output$parameter_table <- renderTable({
+      parameter_history()
     })
     
     output$data_preview <- renderTable({
@@ -144,6 +148,10 @@
              "1" = which.min(ics$aics),
              "2" = which.min(ics$bics),
              "3" = input$numModes)
+    })
+    
+    output$fitted_parameters <- renderTable({
+      tail(parameter_history(), num_modes())
     })
     
     # EM results for the chosen number of modes.

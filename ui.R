@@ -25,7 +25,8 @@ fluidPage(
       tabsetPanel(
         id = "main_tabs",
         tabPanel("Histogram", plotOutput("hist_em")),
-        tabPanel("Parameters", tableOutput("parameter_table")),
+        tabPanel("Fitted Parameters", tableOutput("fitted_parameters")),
+        tabPanel("Parameter History", tableOutput("parameter_table")),
         tabPanel("Input Data", tableOutput("data_preview")),
         tabPanel("AIC/BIC Plot", plotOutput("ic_plot"))
       )
